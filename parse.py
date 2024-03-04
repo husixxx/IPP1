@@ -15,32 +15,30 @@ backjumps = 0
 badjumps = 0
 declared_labels = []
 used_labels = []
-
 order = 1
 root = ET.Element("program", language="IPPcode24")
-# Regulární výrazy pro různé typy tokenů
+
+
+
+
 def print_help():
     
-    print("Usage: python3 main.py <input_file> <output_file>")
+    print("Usage: ./parse.py <input_file> <output_file>")
 
 regex_patterns = {
-    "VARIABLE": r"^(LF|TF|GF)@[a-zA-Z_][a-zA-Z0-9_$&%*!?-]*$",  # Citlivé na velikost písmen
-    "CONSTANT": r"^(int@(-?0x[0-9a-fA-F]+|-?0o[0-7]+|-?\d+)|bool@(true|false)|string@([^\s#\\]|\\[0-9]{3})*|nil@nil)$",
- # Smíšená citlivost
-    "INSTRUCTION": r"^[a-z]",  # Necitlivé na velikost písmen, použijeme re.IGNORECASE pro porovnání
-    "LABEL": r"^[a-zA-Z_][a-zA-Z0-9_$&%*!?-]*$",
+    "VARIABLE": r"^(LF|TF|GF)@[a-zA-Z_$&%*!?-][a-zA-Z0-9_$&%*!?-]*$",  # Citlivé na velikost písmen
+    "CONSTANT": r"^(int@[+-]?(-?0x[0-9a-fA-F]+|-?0o[0-7][+-]|-?\d+)|bool@(true|false)|string@([^\s#\\]|\\[0-9]{3})*|nil@nil)$",
+ # Smíšená citlivost  # Necitlivé na velikost písmen, použijeme re.IGNORECASE pro porovnání
+    "LABEL": r"^[a-zA-Z_$&%*!?-][a-zA-Z0-9_$&%*!?-]*$",
     "Comm" : r"^(#.*$)"
     
 }
 
-
 def get_type(word):
     return word.split("@")[0]
     
-
 def create_token(token_type, value):
     return {"type": token_type, "value": value}
-
 
 def identify_token(word):
     # Kontrola, zda je slovo proměnná nebo konstanta
@@ -75,15 +73,19 @@ def add_argument(instruction, word, arg_count):
     arg1.text = word["value"]
    
 def variable_check(tokens):
+    if len(tokens) == 0:
+        sys.exit(23)
     var = identify_token(tokens.pop(0))
     if var["type"] != "VARIABLE":
         sys.exit(23)
     return var   
 
 def symbol_check(tokens):
+    if len(tokens) == 0:
+        sys.exit(23)
     symb = identify_token(tokens.pop(0))
     if symb["type"] not in ["VARIABLE", "CONSTANT"]:
-        print(symb["type"])
+        
         sys.exit(23)
     return symb
 
@@ -99,7 +101,6 @@ def add_label(instruction, label, arg_count):
     else:
         used_labels.append(label["value"])
         fwjumps += 1
-        
 
 def parse_move(tokens):
     var = variable_check(tokens)
@@ -107,8 +108,7 @@ def parse_move(tokens):
     instruction = ET.SubElement(root, "instruction", order=str(order), opcode="MOVE")
     add_argument(instruction, var,1)
     variable_identify(instruction, symb, 2)
-    
-    # Přidání argumentu pro symbol
+
 
 def get_args():
     file_exist = False
@@ -137,8 +137,7 @@ def get_args():
             if not file_exist:
                 sys.exit(10)
             stats_files[current_file].append(arg)
-        else:
-            exit(1)
+        
 
     for file, args in stats_files.items():
         with open(file, 'w') as f:
@@ -150,8 +149,7 @@ def get_args():
                     output = stats[arg]()
                     f.write(f"{output}\n")
    
-   
-    
+
 def parse_defvar(tokens):
     var = variable_check(tokens)
     
@@ -164,9 +162,11 @@ def parse_pushs(tokens):
     variable_identify(instruction, symb, 1)
     
 def parse_pops(tokens):
+    if len(tokens) == 0:
+        sys.exit(23)
     var = identify_token(tokens.pop(0))
     if var["type"] != "VARIABLE":
-        sys.exit("Expected variable, got " + var["value"])
+        sys.exit(23)
     instruction = ET.SubElement(root, "instruction", order=str(order), opcode="POPS")
     add_argument(instruction, var,1)
 
@@ -187,6 +187,8 @@ def add_instruction(opcode):
 
 def parse_read(tokens):
     var = variable_check(tokens)
+    if len(tokens) == 0:
+        sys.exit(23)
     type = identify_token(tokens.pop(0))
     if type["value"] not in ["int", "string", "bool"]:
         sys.exit(23)
@@ -200,7 +202,6 @@ def parse_write(tokens):
     instruction = ET.SubElement(root, "instruction", order=str(order), opcode="WRITE")
     variable_identify(instruction, symb, 1)
 
-
 def parse_strings(tokens, opcode):
     var = variable_check(tokens)
     symb = symbol_check(tokens)
@@ -210,7 +211,6 @@ def parse_strings(tokens, opcode):
     variable_identify(instruction, symb, 2)
     variable_identify(instruction, symb1, 3)
 
-
 def parse_int2char(tokens):
     var = variable_check(tokens)
     symb = symbol_check(tokens)
@@ -218,13 +218,13 @@ def parse_int2char(tokens):
     add_argument(instruction, var, 1)
     variable_identify(instruction, symb, 2)
 
-
 def parse_strlen(tokens):
     var = variable_check(tokens)
     symb = symbol_check(tokens)
     instruction = ET.SubElement(root, "instruction", order=str(order), opcode="STRLEN")
     add_argument(instruction, var, 1)
     variable_identify(instruction, symb, 2)
+    
 def parse_type(tokens):
     var = variable_check(tokens)
     symb = symbol_check(tokens)
@@ -237,6 +237,11 @@ def parse_exit(tokens):
     instruction = ET.SubElement(root, "instruction", order=str(order), opcode="EXIT")
     variable_identify(instruction, symb, 1)
 
+def parse_dprint(tokens):
+    symb = symbol_check(tokens)
+    instruction = ET.SubElement(root, "instruction", order=str(order), opcode="DPRINT")
+    variable_identify(instruction, symb, 1)
+
 stats = {
     "--loc" : lambda: f"{len(loc)}",
     "--comments" : lambda: f"{comms}",
@@ -247,9 +252,6 @@ stats = {
     "--badjumps" : lambda: f"{badjumps}",
     "--frequent" : lambda: f"{frequency()}",
     "--eol" : lambda: f"\n",
-    
-    
-        
 }
 instructions = {
     "MOVE": parse_move,
@@ -261,7 +263,8 @@ instructions = {
     "INT2CHAR" : parse_int2char,
     "STRLEN" : parse_strlen,
     "TYPE" : parse_type,
-    "EXIT" : parse_exit
+    "EXIT" : parse_exit,
+    "DPRINT" : parse_dprint
     # Další instrukce...
 }
 
@@ -273,10 +276,12 @@ def parse_label(tokens, opcode, arg_count):
     global fwjumps
     global jumps
     global used_labels
+    if len(tokens) == 0:
+        sys.exit(23)
     label = identify_token(tokens.pop(0))
     if label["type"] != "LABEL":
-        sys.exit("Expected label, got " + label["value"])
-    instruction = ET.SubElement(root, "instruction", order=str(order), opcode=opcode)
+        sys.exit(23)
+    instruction = ET.SubElement(root, "instruction", order=str(order), opcode=opcode.upper())
     arg1 = ET.SubElement(instruction, "arg" + str(arg_count), type="label")
     arg1.text = label["value"]
     # if label["value"] in declared_labels:
@@ -294,17 +299,20 @@ def parse_label(tokens, opcode, arg_count):
 
 def frequency():
     
-    
-    
     opcode_counts = Counter(loc)
     most_freq = opcode_counts.most_common()
     return ','.join([op_code for op_code, count in most_freq])
 
 def parse_jumps(tokens, opcode):
+    
     global jumps
+    
+    if len(tokens) == 0:
+        sys.exit(23)
+    
     label = identify_token(tokens.pop(0))
     if label["type"] != "LABEL":
-        sys.exit("Expected label, got " + label["value"])
+        sys.exit(23)
     symb1 = symbol_check(tokens)
     symb2 = symbol_check(tokens)
     instruction = ET.SubElement(root, "instruction", order=str(order), opcode=opcode)
@@ -326,35 +334,39 @@ def main():
     global badjumps
     global labels
     order = 1
-    
     tokens = []
+    if sys.argv[1]:
+        print_help()
+        sys.exit(0)
     for line in sys.stdin:
         for i in line.split():
             if identify_token(i)["type"] == "Comm":
                 comms += 1
         words_before = line.split('#')[0].strip()
-        
         instruction_count = 0
         if words_before:
             words = words_before.split()
-            # print("KOKOOOOOOOOOOOOOOOOT", words)
             for word in words:
-                if any(word.upper() in lst for lst in [instructions, frames, arithemtic, strings, label, jumps]): # Only one instruction per line !
-                    instruction_count += 1
+                if any(word.upper() in lst for lst in [instructions, frames, arithemtic, strings,jumps]) or word in label: # Only one instruction per line !
                     loc.append(word.upper())
+                    instruction_count += 1
                 if instruction_count == 2:
-                    sys.exit(69)    # aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                   
+                    sys.exit(23)    # aaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                 
             tokens.extend(words)
-            
-
+    
+    
+    if(len(tokens) == 0):
+        sys.exit(21)
     if identify_token(tokens.pop(0))["value"] != ".IPPcode24":
         sys.exit(21)
-        
-        
+    
+    
     tree = ET.ElementTree(root)
-    # DONT FORGET: NA JEDNEM RADKU MAX 1 INSTRUKCE !!!!!!!!!!!!!
+    
     while tokens:
+        
         token = identify_token(tokens.pop(0))
         # print(token["type"], token["value"])
         if token["value"].upper() in instructions:
@@ -362,6 +374,7 @@ def main():
         elif token["value"].upper() in frames:
             add_instruction(token["value"])
         elif token["value"].upper() in arithemtic:
+            
             parse_arithmetic(tokens, token["value"])
         elif token["value"].upper() in strings:
             parse_strings(tokens, token["value"])
@@ -370,37 +383,27 @@ def main():
         elif token["value"].upper() in jumps:
             parse_jumps(tokens, token["value"])
         elif token["type"] == "UNKNOWN":
-            sys.exit("Unknown token: " + token["value"])
+            sys.exit(69)
         elif token["type"] == "Comm":
             pass
         elif token["type"] == "Header":
+            sys.exit(23)
+        elif token["type"] == "LABEL":
             sys.exit(22)
         else:
-            sys.exit("Unknown instruction: " + token["value"])
+            sys.exit(23)
         order += 1
 
     args = get_args()
-    ET.indent(tree, space="\t")
-    tree.write(sys.stdout, encoding="unicode", xml_declaration=True)
+    print('<?xml version="1.0" encoding="UTF-8"?>')
+
+    ET.indent(tree, space="  ")
+    tree.write(sys.stdout, encoding="unicode", xml_declaration=False)
+    
 
     for i in used_labels:
         if i not in declared_labels:
             badjumps += 1
-    
-    
-  
-    
-    # print("AAAAAAAAAA ->" , comms)
-    # print("AAAAAAAAAA ->" , len(loc))
-    # print("AAAAAAAAAA ->" , labels)
-    # print("fwjump", fwjumps)
-    # print("backjump", backjumps)
-    # print("badjumps", badjumps)
-    
-    
-    # print(i)
+
 if __name__ == "__main__":
-    
     main()
-# Press the green button in the gutter to run the script.
-# if __name__ == '__main__':
